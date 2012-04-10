@@ -103,7 +103,7 @@ void setup() {
   Serial.begin(9600);
   Serial.println("openenergymonitor.org RFM12B > OKG > Wiznet, > emoncms");
   
-  pinMode(OUTPUT,LEDpin);
+  pinMode(LEDpin, OUTPUT);
   digitalWrite(LEDpin,HIGH);
   
   rf12_initialize(MYNODE, freq,group);
