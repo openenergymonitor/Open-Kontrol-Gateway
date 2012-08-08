@@ -7,13 +7,7 @@ Licence: GNU GPL V3
 Authors: Trystan Lea and Glyn Hudson 
 Created: 09/04/2012 
 
-  Code will also work with Arduino Ethernet, Arduino + newer Ethernet shields with addition of RFM12B. 
-  Bug in older Ethernet shields stops RFM12B and Wiznet being using together
-  
- Modifications required to JeeLib and Arduino Ethernet library.
- Use librarys from OpenEnergyMonitor GitHub
- Ethernet library needs to be modified to disable interrupts to enable RFM12B and Ethernet to work at the same time. 
- Thanks to John Crouchley for these modifications. See readme.txt for details
+See wiki and GitHub readme for instructions
  
  Credits:
  Based on Arduino DNS and DHCP-based Web client by David A. Mellis
