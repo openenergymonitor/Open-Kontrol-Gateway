@@ -5,35 +5,28 @@ Receive data from an emonTx via RFM12B wireless then post online to emoncms usin
 Part of the openenergymonitor.org project
 Licence: GNU GPL V3
 Authors: Trystan Lea and Glyn Hudson 
-Created: 09/04/2012 
+Created: 09/04/2012, updated 08/07/12 
 
-See wiki and GitHub readme for instructions
+Use the following librarys: 
+https://github.com/openenergymonitor/Ethernet
+https://github.com/openenergymonitor/jeelib
+  
+For full step-by-step instructions See: http://wiki.openenergymonitor.org/index.php?title=Open_Kontrol_Gateway 
  
  Credits:
  Based on Arduino DNS and DHCP-based Web client by David A. Mellis
  modified 12 April 2011by Tom Igoe, based on work by Adrian McEwen
  Uses Jeelabs.org JeeLib library for RFM12B 
- 
+
+Example will also work with Arduino Ethernet, Arduino + newer Ethernet shields with addition of RFM12B. Bug in older Ethernet shields stops RFM12B and Wiznet being using together
 
  
  */
 
 #include <SPI.h>
-#include <Ethernet.h>         //Arduino Etherent library - modifications needed, see readme
-#include <JeeLib.h>	     //JeeLabs library - RFM12B wireless driver https://github.com/jcw/jeelib
-#include <avr/wdt.h>         //reset watchdog 
-#include <Wire.h>            //Arduino Wire library 
-#include <RTClib.h>          //Jeelabs RTC library /https://github.com/jcw/rtclib
-RTC_Millis RTC;
+#include <Ethernet.h>
+#include <JeeLib.h>	     //https://github.com/jcw/jeelib
 
-
-
-
-//------------------------------------------------------------------------------------------------------
-// System Setup
-//------------------------------------------------------------------------------------------------------
-#define UNO       //enable anti crash wachdog reset only works with Uno (optiboot) bootloader, comment out the line if using delianuova
-//------------------------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------------------------------
 // RFM12B Wireless Config
@@ -44,26 +37,24 @@ RTC_Millis RTC;
 
 const int emonTx_NodeID=10;  //set to match emonTx node ID
 
-typedef struct { int power1, power2, power3, voltage; } PayloadTX;    //Structure must match that being sent from emonTx
+typedef struct { int power, apparentPower, Vrms, heaterPower, heaterApparent, gen, apparentGen, Livingroom, Outside, pulse; } PayloadTX;    //Structure must match that being sent from emonTx
 PayloadTX emontx;
 
-unsigned long last_rf;
 //------------------------------------------------------------------------------------------------------
  
 
 //------------------------------------------------------------------------------------------------------
 // Ethernet Config
 //------------------------------------------------------------------------------------------------------
-byte mac[] = {  0x00, 0xAC, 0xBB, 0xCC, 0xDE, 0x02 }; //OKG MAC - experiment with different MAC addresses if you have trouble connecting 
+byte mac[] = {  0x00, 0xAB, 0xBB, 0xCC, 0xDE, 0x02 }; //OKG MAC - experiment with different MAC addresses if you have trouble connecting 
 byte ip[] = {192, 168, 1, 99 };                       //OKG static IP - only used if DHCP failes
 
-char server[] = "vis.openenergymonitor.org";         // for posting to emoncms server with host name, (DNS lookup) comment out if using static IP address below
+char server[] = "emoncms.org";         // for posting to emoncms server with host name, (DNS lookup) comment out if using static IP address below
 // vis.openenergymonitor.org is the public emoncms demo server. emoncms can also be downloaded and ran on any server
 
 //IPAddress server(xxx,xxx,xxx,xxx);                 // - emoncms server IP for posting to server without a host name, can be used for posting to local emoncms server
 
 EthernetClient client;
-int data_ready, rf_error, ethernet_requests, lastConnected;
 //------------------------------------------------------------------------------------------------------
 
 
@@ -95,6 +86,9 @@ public:
 PacketBuffer str;
 //--------------------------------------------------------------------------------------------------------
 
+int data_ready, rf_error;
+unsigned long last_rf;
+
 
 //------------------------------------------------------------------------------------------------------
 // SETUP
@@ -107,13 +101,15 @@ void setup() {
   pinMode(LEDpin, OUTPUT);
   digitalWrite(LEDpin,HIGH);
   
+  rf12_set_cs(9);
+  rf12_initialize(MYNODE, freq,group);
+  last_rf = millis()-40000;                                       // setting lastRF back 40s is useful as it forces the ethernet code to run straight away
   
   
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP");
     Ethernet.begin(mac, ip);                                      //configure manually 
   }
-  
   
   // print your local IP address:
   Serial.print("Local IP address: ");
@@ -124,11 +120,6 @@ void setup() {
   }
   Serial.println();
   
-  delay(200);
-  
-  rf12_set_cs(9);                                                 //Open Kontrol Gateway RFM12B CS pin  - 10 on emonTx/NanodeRF etc. 
-  rf12_initialize(MYNODE, freq,group);
-  last_rf = millis()-40000;                                       // setting lastRF back 40s is useful as it forces the ethernet code to run straight away
  // print RFM12B settings 
   Serial.print("Node: "); 
   Serial.print(MYNODE); 
@@ -139,15 +130,8 @@ void setup() {
   Serial.print(" Network: "); 
   Serial.println(group);
   
-  
-  data_ready=0; rf_error=0; ethernet_requests=0; lastConnected=0;      //reset variables after reset 
-  
-  #ifdef UNO
-  wdt_enable(WDTO_8S);                                                 //endable reset watchdog
-  #endif;
-  
   delay(200);
-  digitalWrite(LEDpin,LOW);	                                  //turn of OKG status LED to indicate setup success 
+  digitalWrite(LEDpin,LOW);	//turn of OKG status LED to indicate setup success 
   
 }
 //------------------------------------------------------------------------------------------------------
@@ -159,9 +143,6 @@ void setup() {
 void loop()
 {
 
-  #ifdef UNO
-  wdt_reset();         //8s anticrash reset watchdog 
-  #endif
   //-----------------------------------------------------------------------------------------------------------------
   // 1) Receive date from emonTx via RFM12B
   //-----------------------------------------------------------------------------------------------------------------
@@ -183,10 +164,16 @@ void loop()
           
           str.reset();                                                   // Reset json string      
           str.print("{rf_fail:0");                                       // RF recieved so no failure
-          str.print(",power1:");        str.print(emontx.power1);          // Add power reading
-          str.print(",power2:");        str.print(emontx.power2);          // Add power reading
-          str.print(",power3:");        str.print(emontx.power3);          // Add power reading 
-          str.print(",voltage:");      str.print(emontx.voltage);        // Add emontx battery voltage reading
+          str.print(",BF_Rp:");        str.print(emontx.power);          // Add power reading
+          str.print(",BF_Ap:");        str.print(emontx.apparentPower);          // Add power reading
+          str.print(",vrms1:");        str.print(emontx.Vrms);          // Add power reading 
+          str.print(",BF_RpH:");      str.print(emontx.heaterPower);        // Add emontx battery voltage reading
+          str.print(",BF_ApH:");      str.print(emontx.heaterApparent);
+          str.print(",BF_RpS:");      str.print(emontx.gen);
+          str.print(",BR_ApS:");      str.print(emontx.apparentGen);
+          str.print(",BF_Tl:");      str.print((emontx.Livingroom/100.0));
+          str.print(",BF_To:");      str.print((emontx.Outside/100.0));
+          
           
           Serial.println(str.buf);
     
@@ -212,40 +199,24 @@ void loop()
  //-----------------------------------------------------------------------------------------------------------------
  // 3) Post Data
  //-----------------------------------------------------------------------------------------------------------------
-   
-  
-  if (data_ready) {  
-    if (client.connect(server, 80)) {
-      Serial.println("connected");
-      str.print("}\0");  		    //  End of json string
-      client.print("GET /emoncms3/api/post.json?apikey=xxxxxxxxxYOUR API KEY HERExxxxxxxxxxxjson=");	//enter your emoncms write only API key here
-      client.print(str.buf);		    //send the data!
-      client.println();
-      //delay(500;
-      char c = client.read();  // if there are incoming bytes available from the server, read them and print them:
-      //if (c=="ok"
-      Serial.print(c);
-      client.stop();			    //disconnect 
-      data_ready=0;  ethernet_requests=0;   //reset flags
-      digitalWrite(LEDpin,LOW);		    //turn off status LED to indicate succesful data receive and online posting
-    } 
-    else { 
-      Serial.println("connection failed"); // if no connection you didn't get a connection to the server:
-      ethernet_requests++;                 //increase fail count
-      delay(1000);			    //wait 1s before trying again  
-    }
- 
-    if (ethernet_requests > 10) delay(10000); // Reset if more than 10 request attempts in a row have resulted in connection failed
-    }
- 
- // if (client.available()) {
-    //char c = client.read();  // if there are incoming bytes available from the server, read them and print them:
-    //if (c=="ok"
-    //Serial.print(c);
-  //}
-  
- //lastConnected = client.connected();           // store the state of the connection for next time through the loop:
-  
+if (data_ready) {  
+  if (client.connect(server, 80)) {
+    Serial.println("connected");
+    str.print("}\0");  			//  End of json string
+    client.print("GET /emoncms3/api/post.json?apikey=xxxxxxxxxxxxxxxxxxxxxxxxxxxxx&json=");	//enter your emoncms write only API key here
+    client.print(str.buf);		//send the data
+    client.println();
+    delay(300);
+    client.stop();			//disconnect 
+    data_ready=0;
+    digitalWrite(LEDpin,LOW);		//turn off status LED to indicate succesful data receive and online posting
+  } 
+  else { 
+    Serial.println("connection failed"); // if no connection you didn't get a connection to the server:
+    delay(1000);			//wait 2s before trying again 
+  }
+}
+
 }//end loop
 
 //------------------------------------------------------------------------------------------------------
