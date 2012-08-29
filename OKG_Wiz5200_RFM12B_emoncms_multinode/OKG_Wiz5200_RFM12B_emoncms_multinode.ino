@@ -43,7 +43,7 @@ byte ip[] = {192, 168, 1, 99 };                       // OKG static IP - only us
 
 // Enter your apiurl here including apikey:
 char apiurl[] = "http://emoncms.org/api/post.json?apikey=YOURAPIKEY";
-
+char timeurl[] = "http://emoncms.org/time/local.json?apikey=YOURAPIKEY";
 // For posting to emoncms server with host name, (DNS lookup) comment out if using static IP address below
 // emoncms.org is the public emoncms server. Emoncms can also be downloaded and run on any server.
 char server[] = "emoncms.org";    
@@ -82,7 +82,10 @@ PacketBuffer str;
 //--------------------------------------------------------------------------------------------------------
 
 int data_ready, rf_error;
-unsigned long last_rf;
+unsigned long last_rf, time60s;
+boolean lastConnected = false;
+
+char line_buf[50];                        // Used to store line of http reply header
 
 //------------------------------------------------------------------------------------------------------
 // SETUP
@@ -135,6 +138,49 @@ void setup() {
 //------------------------------------------------------------------------------------------------------
 void loop()
 {
+  if (client.available())
+  {
+    memset(line_buf,NULL,sizeof(line_buf));
+    int pos = 0;
+    
+    while (client.available()) {
+      char c = client.read();
+      line_buf[pos] = c;
+      pos++;
+    }  
+
+    if (strcmp(line_buf,"ok")==0)
+    {
+      Serial.println("OK recieved");
+    }
+    else if(line_buf[0]=='t')
+    { 
+      Serial.print("Time: ");
+      Serial.println(line_buf);
+    
+      char tmp[] = {line_buf[1],line_buf[2]};
+      byte hour = atoi(tmp);
+      tmp[0] = line_buf[4]; tmp[1] = line_buf[5];
+      byte minute = atoi(tmp);
+      tmp[0] = line_buf[7]; tmp[1] = line_buf[8];
+      byte second = atoi(tmp);
+
+      if (hour>0 || minute>0 || second>0) 
+      {  
+        char data[] = {'t',hour,minute,second};
+        int i = 0; while (!rf12_canSend() && i<10) {rf12_recvDone(); i++;}
+        rf12_sendStart(0, data, sizeof data);
+        rf12_sendWait(0);
+      }
+    }
+  }
+  
+  if (!client.connected() && lastConnected) {
+    Serial.println();
+    Serial.println("disconnecting.");
+    client.stop();
+  }
+  
   //-----------------------------------------------------------------------------------------------------------------
   // 1) Receive date from emonTx via RFM12B
   //-----------------------------------------------------------------------------------------------------------------
@@ -176,23 +222,35 @@ void loop()
  //-----------------------------------------------------------------------------------------------------------------
  // 3) Post Data
  //-----------------------------------------------------------------------------------------------------------------
-if (data_ready) {
-  if (client.connect(server, 80)) {
-    
-    Serial.print("Sent: "); Serial.println(str.buf);
-    client.print("GET "); client.print(apiurl); client.print(str.buf); client.println();
-    
-    delay(300);
-    client.stop();			  // disconnect 
-    data_ready=0;
-    digitalWrite(LEDpin,LOW);		  // turn off status LED to indicate succesful data receive and online posting
-  } 
-  else { 
-    Serial.println("connection failed");  // if no connection you didn't get a connection to the server:
-    delay(1000);			  // wait 1s before trying again 
-  }
-}
+  if (!client.connected() && data_ready) {
 
+    if (client.connect(server, 80)) {
+      Serial.println();
+      Serial.print("Sent: "); Serial.println(str.buf);
+      client.print("GET "); client.print(apiurl); client.print(str.buf); client.println();
+    
+      delay(300);
+    
+      data_ready=0;
+      digitalWrite(LEDpin,LOW);		  // turn off status LED to indicate succesful data receive and online posting
+    } 
+    else {Serial.println("Cant connect to send data"); delay(500); client.stop();}
+  }
+
+  if (!client.connected() && ((millis()-time60s)>10000))
+  {
+    time60s = millis();                                                 // reset lastRF timer
+
+    if (client.connect(server, 80)) {
+      Serial.println();
+      Serial.println("Sent time request");
+      client.print("GET "); client.print(timeurl); client.println();
+    }
+    else {Serial.println("Cant connect to req time"); delay(500); client.stop();}
+
+  }
+
+  lastConnected = client.connected();
 }//end loop
 
 //------------------------------------------------------------------------------------------------------
