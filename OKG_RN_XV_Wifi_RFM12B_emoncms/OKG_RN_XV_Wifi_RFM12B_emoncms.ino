@@ -34,8 +34,8 @@ SoftwareSerial wifiSerial(5,6);       //Using RH Xbee socket on OKG with two RH 
 // RFM12B Wireless Config
 //------------------------------------------------------------------------------------------------------
 #define MYNODE 30            // node ID of OKG 
-#define freq RF12_868MHZ     // frequency - must match RFM12B module and emonTx
-#define group 1            // network group - must match emonTx 
+#define freq RF12_433MHZ     // frequency - must match RFM12B module and emonTx
+#define group 210            // network group - must match emonTx 
 //------------------------------------------------------------------------------------------------------
 
 typedef struct { int power1, power2, power3, voltage; } PayloadTX;
@@ -52,7 +52,7 @@ void terminal();
 
 /* Change these to match your WiFi network */
 const char mySSID[] = "YOURSSID";
-const char myPassword[] = "YOUR WIFI PASSWORD";
+const char myPassword[] = "YOUR WIFI PASSWORD";	//leave blank for non
 
 // Enter your apiurl here including apikey:
 char apiurl[] = "http://emoncms.org/api/post.json?apikey=YOURAPIKEY&json=";
