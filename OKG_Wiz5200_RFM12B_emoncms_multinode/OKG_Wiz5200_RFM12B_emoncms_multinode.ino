@@ -26,11 +26,12 @@
 #include <SPI.h>
 #include <Ethernet.h>
 #include <JeeLib.h>
+#include <avr/wdt.h>
 
 //------------------------------------------------------------------------------------------------------
 // RFM12B Wireless Config
 //------------------------------------------------------------------------------------------------------
-#define MYNODE 30            // node ID of OKG 
+#define MYNODE 15            // node ID of OKG 
 #define freq RF12_433MHZ     // frequency - must match RFM12B module and emonTx
 #define group 210            // network group - must match emonTx 
 //------------------------------------------------------------------------------------------------------
@@ -42,8 +43,8 @@ byte mac[] = { 0x00, 0xAB, 0xBB, 0xCC, 0xDE, 0x02 };  // OKG MAC - experiment wi
 byte ip[] = {192, 168, 1, 99 };                       // OKG static IP - only used if DHCP failes
 
 // Enter your apiurl here including apikey:
-char apiurl[] = "http://emoncms.org/api/post.json?apikey=YOURAPIKEY";
-char timeurl[] = "http://emoncms.org/time/local.json?apikey=YOURAPIKEY";
+char apiurl[] = "http://emoncms.org/api/post.json?apikey=YOUR-API-KEY";
+char timeurl[] = "http://emoncms.org/time/local.json?apikey=YOUR-API-KEY";   //usually same API key twice
 // For posting to emoncms server with host name, (DNS lookup) comment out if using static IP address below
 // emoncms.org is the public emoncms server. Emoncms can also be downloaded and run on any server.
 char server[] = "emoncms.org";    
@@ -51,6 +52,8 @@ char server[] = "emoncms.org";
 //IPAddress server(xxx,xxx,xxx,xxx);                  // emoncms server IP for posting to server without a host name, can be used for posting to local emoncms server
 
 EthernetClient client;
+
+const int WizResetPin = 7;                             // wired to the Wiznet reset line
 //------------------------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------------------------------
@@ -96,7 +99,15 @@ void setup() {
   Serial.println("openenergymonitor.org RFM12B > OKG > Wiznet, > emoncms MULTI-NODE");
   
   pinMode(LEDpin, OUTPUT);
+   
   digitalWrite(LEDpin,HIGH);
+  
+  pinMode(WizResetPin, OUTPUT);        // Reset the Wiznet module
+  digitalWrite(WizResetPin, LOW);                
+  delay(5);
+  digitalWrite(WizResetPin, HIGH);
+  
+  wdt_enable(WDTO_8S);                //enable an 8's reset watchdog 
   
   rf12_set_cs(9);
   rf12_initialize(MYNODE, freq,group);
@@ -187,6 +198,7 @@ void loop()
   if (rf12_recvDone()){      
       if (rf12_crc == 0 && (rf12_hdr & RF12_HDR_CTL) == 0)
       {
+        digitalWrite(LEDpin,HIGH);
         int node_id = (rf12_hdr & 0x1F);
         byte n = rf12_len;
          
@@ -204,7 +216,16 @@ void loop()
         data_ready = 1; 
         last_rf = millis(); 
         rf_error=0;
-      }
+    digitalWrite(LEDpin,LOW); 
+   
+     for (int i = 0; i<2; i++)
+  {
+    digitalWrite(LEDpin,HIGH);
+    delay(100);
+    digitalWrite(LEDpin,LOW);
+    delay(100);
+  } 
+    }
   }
      
   //-----------------------------------------------------------------------------------------------------------------
@@ -223,8 +244,10 @@ void loop()
  // 3) Post Data
  //-----------------------------------------------------------------------------------------------------------------
   if (!client.connected() && data_ready) {
+    
 
     if (client.connect(server, 80)) {
+      
       Serial.println();
       Serial.print("Sent: "); Serial.println(str.buf);
       client.print("GET "); client.print(apiurl); client.print(str.buf); client.println();
@@ -232,8 +255,18 @@ void loop()
       delay(300);
     
       data_ready=0;
-      digitalWrite(LEDpin,LOW);		  // turn off status LED to indicate succesful data receive and online posting
-    } 
+      
+      
+   for (int i = 0; i<3; i++)
+  {
+    digitalWrite(LEDpin,HIGH);
+    delay(100);
+    digitalWrite(LEDpin,LOW);
+    delay(100);
+  }
+  
+    }
+      
     else {Serial.println("Cant connect to send data"); delay(500); client.stop();}
   }
 
@@ -251,6 +284,9 @@ void loop()
   }
 
   lastConnected = client.connected();
+
+wdt_reset();                                                   // Reset the watchdog
+
 }//end loop
 
 //------------------------------------------------------------------------------------------------------

@@ -30,7 +30,7 @@
 //------------------------------------------------------------------------------------------------------
 // RFM12B Wireless Config
 //------------------------------------------------------------------------------------------------------
-#define MYNODE 30            // node ID of OKG 
+#define MYNODE 15            // node ID of OKG 
 #define freq RF12_433MHZ     // frequency - must match RFM12B module and emonTx
 #define group 210            // network group - must match emonTx 
 //------------------------------------------------------------------------------------------------------
@@ -57,6 +57,7 @@ char server[] = "emoncms.org";
 //IPAddress server(xxx,xxx,xxx,xxx);                  // emoncms server IP for posting to server without a host name, can be used for posting to local emoncms server
 
 EthernetClient client;
+const int WizResetPin = 7;                             // wired to the Wiznet reset line
 //------------------------------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------------------------------
@@ -105,7 +106,14 @@ void setup() {
   
   rf12_set_cs(9);
   rf12_initialize(MYNODE, freq,group);
-  last_rf = millis()-40000;                                       // setting lastRF back 40s is useful as it forces the ethernet code to run straight away
+  last_rf = millis()-40000;     // setting lastRF back 40s is useful as it forces the ethernet code to run straight away
+  
+  pinMode(WizResetPin, OUTPUT);        // Reset the Wiznet module
+  digitalWrite(WizResetPin, LOW);                
+  delay(5);
+  digitalWrite(WizResetPin, HIGH);
+  
+  wdt_enable(WDTO_8S);                //enable an 8's reset watchdog
   
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP");
@@ -272,6 +280,7 @@ void loop()
 
   lastConnected = client.connected();
 
+wdt_reset();  
 }//end loop
 
 //------------------------------------------------------------------------------------------------------
