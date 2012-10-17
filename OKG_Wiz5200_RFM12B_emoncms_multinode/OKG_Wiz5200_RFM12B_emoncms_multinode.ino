@@ -107,7 +107,6 @@ void setup() {
   delay(5);
   digitalWrite(WizResetPin, HIGH);
   
-  wdt_enable(WDTO_8S);                //enable an 8's reset watchdog 
   
   rf12_set_cs(9);
   rf12_initialize(MYNODE, freq,group);
@@ -140,6 +139,7 @@ void setup() {
   delay(200);
   digitalWrite(LEDpin,LOW);	//turn of OKG status LED to indicate setup success 
   
+  wdt_enable(WDTO_8S);                //enable an 8's reset watchdog 
 }
 //------------------------------------------------------------------------------------------------------
 

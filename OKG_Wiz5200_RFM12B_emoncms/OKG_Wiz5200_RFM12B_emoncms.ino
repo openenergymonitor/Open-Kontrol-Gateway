@@ -113,7 +113,6 @@ void setup() {
   delay(5);
   digitalWrite(WizResetPin, HIGH);
   
-  wdt_enable(WDTO_8S);                //enable an 8's reset watchdog
   
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP");
@@ -141,6 +140,8 @@ void setup() {
   
   delay(200);
   digitalWrite(LEDpin,LOW);	//turn of OKG status LED to indicate setup success 
+  
+  wdt_enable(WDTO_8S);                //enable an 8's reset watchdog
   
 }
 //------------------------------------------------------------------------------------------------------
