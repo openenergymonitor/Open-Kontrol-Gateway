@@ -26,6 +26,7 @@
 #include <SPI.h>
 #include <Ethernet.h>
 #include <JeeLib.h>	     //https://github.com/jcw/jeelib
+#include <avr/wdt.h>
 
 //------------------------------------------------------------------------------------------------------
 // RFM12B Wireless Config
